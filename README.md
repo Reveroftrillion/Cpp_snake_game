@@ -113,8 +113,9 @@ g++ -std=c++17 src/main.cpp -lncurses -o snake
 
 # 실행
 ./snake
+```
 
 ---
 
 ## 플레이 스크린샷
-
+- 
