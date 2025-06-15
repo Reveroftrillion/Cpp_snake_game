@@ -15,11 +15,14 @@ UI 분석
 - 빨강색 = Poison = 먹으면 몸통 1 감소, 몸통이 3일 때 먹으면 게임 오버
 - 자홍색 = Gate
 - 노랑색 = TimeItem = 먹으면 40 tick 동안 속도가 1.5배 증가
+- 형광 초록색 = ShieldItem = 먹으면 40 tick
+- 핑크색 = RandomItem = 위에 있는 4개의 아이템 중 하나를 무작위로 획득
 
 - GrowthItem, PoisonItem의 스폰 주기 = 50 tick
 - TimeItem의 스폰 주기 = 30 tick
 - Gate의 스폰 주기 = 80 tick
 - ShieldItem의 스폰 주기 = 40 tick
+- RandomItem의 스폰 주기 = 70 tick
 
 미션 - 다 깨면 다음 스테이지로 넘어간다.
 - 몸 길이 >= 7
