@@ -45,7 +45,7 @@ public:
     int shieldTick       = 0;     // 남은 무적 tick
     int shieldCount      = 0;     // 획득 횟수
     int shieldSpawnTimer = 0;     // 스폰 타이머
-
+    int randomSpawnTimer = 0;
     /* ───────────────────────── ctor ───────────────────────── */
     Game()
     {
@@ -65,6 +65,7 @@ public:
         init_pair(7, COLOR_BLACK,   COLOR_MAGENTA);  // Gate
         init_pair(8, COLOR_YELLOW,  COLOR_YELLOW);   // Time Item
         init_pair(COL_SHIELD, COLOR_BLACK, COLOR_GREEN); // Shield
+        init_pair(COL_RANDOM, COLOR_WHITE, COLOR_MAGENTA);
 
         keypad(stdscr, TRUE);
         nodelay(stdscr, TRUE);
@@ -93,6 +94,7 @@ public:
                 timeItemTimer++;
                 shieldSpawnTimer++;          // 🟠
                 gameTimerSeconds++;
+                randomSpawnTimer++;
             }
 
             clear();
@@ -110,16 +112,19 @@ public:
             /* ── Score Board ── */
             mvwprintw(score, 1, 1, "*******Score Board*******");
             mvwprintw(score, 3, 1, " B: %d/%d",
-                      (int)gameMap.snakeHeadObject.snakeBodySegments.size(),
-                      maxSnakeLength);
+                    (int)gameMap.snakeHeadObject.snakeBodySegments.size(),
+                    maxSnakeLength);
             mvwprintw(score, 4, 1, " +: %d", growthItemCount);
             mvwprintw(score, 5, 1, " -: %d", poisonItemCount);
             mvwprintw(score, 6, 1, " G: %d", gatesUsedCount);
             mvwprintw(score, 7, 1, " S: %d", shieldCount);          // 🟠
+
+            /* ▼▼ 이 두 줄을 꼭 붙여 주세요 ▼▼ */
             if (shieldTick > 0)
                 mvwprintw(score, 8, 1, " INV:%02d", shieldTick);    // 🟠
+
             mvwprintw(score, 9, 1, " time: %d",
-                      gameTimerSeconds / (1000 / gameSpeedDelay));
+                    gameTimerSeconds / (1000 / gameSpeedDelay));
 
             /* ── Mission Board ── */
             mvwprintw(mission, 1, 1, "******Mission Board******");
@@ -176,12 +181,20 @@ public:
             wattroff(board, COLOR_PAIR(8));
 
             /* 🟠 Shield Item 출력 */
-            if (gameMap.shieldItemObject.coord.row != 0) {          // ★ sentinel 체크
+            if (gameMap.shieldItemObject.coord.row != -1) {          // ★ sentinel 체크
                 wattron(board, COLOR_PAIR(COL_SHIELD));
                 mvwaddch(board,
                          gameMap.shieldItemObject.coord.row,
                          gameMap.shieldItemObject.coord.col, ' ');
                 wattroff(board, COLOR_PAIR(COL_SHIELD));
+            }
+
+            if (gameMap.randomItemObject.coord.row != -1) {
+                wattron(board, COLOR_PAIR(COL_RANDOM));
+                mvwaddch(board,
+                         gameMap.randomItemObject.coord.row,
+                         gameMap.randomItemObject.coord.col, ' ');
+                wattroff(board, COLOR_PAIR(COL_RANDOM));
             }
 
             refresh();
@@ -209,6 +222,11 @@ public:
             if (shieldSpawnTimer >= SHIELD_SPAWN_CYCLE) {        // 🟠
                 shieldSpawnTimer = 0;
                 gameMap.spawnShieldItem();
+            }
+
+            if (randomSpawnTimer >= 70) {            // 주기 원하는 값
+                randomSpawnTimer = 0;
+                gameMap.spawnRandomItem();
             }
 
             if (speedBoostTimer > 0) { if (--speedBoostTimer == 0) speedMultiplier = 1; }
@@ -309,6 +327,15 @@ public:
 
     bool isValid(int previousDirection = 0) // Use renamed parameter
     {
+        if (gameMap.snakeHeadObject.coord.row < 1 ||
+            gameMap.snakeHeadObject.coord.row > gameMap.mapSize.height ||
+            gameMap.snakeHeadObject.coord.col < 1 ||
+            gameMap.snakeHeadObject.coord.col > gameMap.mapSize.width)
+        {
+            gameOverReason = "Out of bounds.";
+            return false;
+        }
+
         if (shieldTick > 0) return true;
 
         if (previousDirection == 5)
@@ -635,7 +662,40 @@ public:
         if (gameMap.snakeHeadObject.coord == gameMap.shieldItemObject.coord) {
             shieldTick   = SHIELD_DURATION;   // 40 tick 무적 상태 시작
             shieldCount++;
-            gameMap.shieldItemObject = ShieldItem();      // 맵에서 제거 (좌표 0,0)
+            gameMap.shieldItemObject = ShieldItem(-1, -1);      // 맵에서 제거 (좌표 0,0)
+        }
+
+        if (gameMap.snakeHeadObject.coord == gameMap.randomItemObject.coord)
+        {
+            int rnd = rand()%4;            // 0:G 1:P 2:T 3:S
+            switch(rnd){
+                case 0:  /* 성장 효과 */
+                    growthItemCount++;
+                    generateGItem();
+                    {
+                        auto &body=gameMap.snakeHeadObject.snakeBodySegments;
+                        auto last=body.end()-1, sec=body.end()-2;
+                        body.push_back(SnakeBody(
+                            last->coord.row-(sec->coord.row-last->coord.row),
+                            last->coord.col-(sec->coord.col-last->coord.col)));
+                    }
+                    break;
+                case 1:  /* 독 효과 */
+                    poisonItemCount++;
+                    generatePItem();
+                    gameMap.snakeHeadObject.snakeBodySegments.pop_back();
+                    break;
+                case 2:  /* 시간 효과 */
+                    generateTItem();
+                    speedMultiplier=1.5;
+                    speedBoostTimer=40;
+                    break;
+                case 3:  /* 보호막 효과 */
+                    shieldTick   = SHIELD_DURATION;
+                    shieldCount++;
+                    break;
+            }
+            gameMap.randomItemObject = RandomItem();   // 좌표 -1,-1 로 리셋
         }
 
         // mission

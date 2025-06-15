@@ -28,13 +28,15 @@ public:
     PoisonItem  poisonItemObject;
     TimeItem    timeItemObject;
     ShieldItem  shieldItemObject;          // 🟠 보호막 아이템
+    RandomItem randomItemObject; 
 
     /* ── 생성자 ── */
     Map(int h = 21, int w = 21, int wallCnt = 0);
     Map(const Map &m);                     // 깊은 복사
 
     /* ── 메서드 ── */
-    void spawnShieldItem();                // 보호막 스폰
+    void spawnShieldItem();    
+    void spawnRandomItem();           
     void print_map();                      // (터미널 디버그용) 
 };
 
@@ -70,6 +72,11 @@ inline Map::Map(int H, int W, int wallCnt)
     for (int k = 1; k <= 3; ++k)
         snakeHeadObject.snakeBodySegments.emplace_back(H / 2 + k, W / 2);
 
+    growthItemObject  = GrowthItem (-1, -1);
+    poisonItemObject  = PoisonItem (-1, -1);
+    timeItemObject    = TimeItem   (-1, -1);
+    shieldItemObject  = ShieldItem (-1, -1);
+    randomItemObject  = RandomItem (-1, -1); 
     /* 3) 내부 랜덤 벽 */
     while (wallCnt--) {
         int r = rand() % H + 1, c = rand() % W + 1;
@@ -97,7 +104,7 @@ inline Map::Map(const Map &m) = default;
 inline void Map::spawnShieldItem()
 {
     /* 이미 맵 위에 존재하면 건너뜀 */
-    if (shieldItemObject.coord.row != 0) return;
+    if (shieldItemObject.coord.row != -1) return;
 
     while (true) {
         int r = rand() % mapSize.height + 1;
@@ -118,6 +125,24 @@ inline void Map::spawnShieldItem()
             shieldItemObject = ShieldItem(r, c);
             break;
         }
+    }
+}
+
+inline void Map::spawnRandomItem()
+{
+    if (randomItemObject.coord.row != -1) return;      // 이미 있음
+    while (true) {
+        int r = rand()%mapSize.height +1;
+        int c = rand()%mapSize.width  +1;
+        Coord p{r,c};
+        bool bad = (p==snakeHeadObject.coord);
+        for(auto &b:snakeHeadObject.snakeBodySegments) bad|=(p==b.coord);
+        for(auto &w:regularWalls) bad|=(p==w.coord);
+        for(auto &w:immuneWalls)  bad|=(p==w.coord);
+        for(auto &g : gameGates)         bad |= (p == g.coord);
+        if(p==growthItemObject.coord||p==poisonItemObject.coord||
+           p==timeItemObject.coord||p==shieldItemObject.coord) bad=true;
+        if(!bad){ randomItemObject=RandomItem(r,c); break; }
     }
 }
 
@@ -143,6 +168,7 @@ inline void Map::print_map()
                     if (p == poisonItemObject.coord)   ch = '-';
                     if (p == timeItemObject.coord)     ch = 'T';
                     if (p == shieldItemObject.coord)   ch = 'S';
+                    if (p == randomItemObject.coord)   ch = 'R'; 
                 }
             }
             std::cout << ch;

@@ -17,9 +17,10 @@ constexpr int OBJ_GROWTH       = 5;
 constexpr int OBJ_POISON       = -5;
 constexpr int OBJ_TIME         = 6;
 constexpr int OBJ_SHIELD       = 7;    // 🟠 보호막 아이템  ← 신규
-
+constexpr int OBJ_RANDOM  = 8;          // ★ 랜덤 아이템
 /*  색상 팔레트 번호(ncurses) – 필요 시 자유롭게 변경  */
 constexpr int COL_SHIELD       = 9;
+constexpr int COL_RANDOM  = 10;      
 /*────────────────────────────────────────────────────────────────────*/
 
 struct Coord
@@ -92,7 +93,12 @@ public:
     ShieldItem(int r,int c):Block(r,c)  { objectType = OBJ_SHIELD; }
     int getObjectType() override { return objectType; }
 };
-
+class RandomItem : public Block {
+public:
+    RandomItem()             : Block(-1,-1){ objectType = OBJ_RANDOM; }
+    RandomItem(int r,int c)  : Block(r, c){ objectType = OBJ_RANDOM; }
+    int getObjectType() override { return objectType; }
+};
 /*─── 게이트 ─────────────────────────────────────────────────────────*/
 class Gate : public Block
 {
