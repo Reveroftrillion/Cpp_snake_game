@@ -119,15 +119,13 @@ g++ -std=c++17 src/main.cpp -lncurses -o snake
 
 ## 플레이 스크린샷
 
-| 시작 화면 | 게임 진행 |
-|-----------|-----------|
-| ![Start Screen](image/start_screen.png) | ![In-Game](image/in_game.png) |
+| 화면 | 설명 |
+|------|------|
+| ![Start Screen](image/start_screen.png) | **시작 화면** – 게임 제목과 조작 키 안내 |
+| ![In-Game](image/in_game.png) | **플레이 진행 중** – 필드·점수판·미션판 표시 |
+| ![Body Collision](image/body.png) | **Game Over ①** – 몸통과 충돌했을 때 메시지 |
+| ![Wall Collision](image/wall.png) | **Game Over ②** – 벽과 충돌했을 때 메시지 |
+| ![Out of Bounds](image/out_of_bound.png) | **Game Over ③** – Shield 무적 후 맵 밖으로 나간 경우 |
 
-| 몸통 충돌 | 벽 충돌 |
-|-----------|-----------|
-| ![Body Collision](image/body.png) | ![Wall Collision](image/wall.png) |
 
-| 맵 밖 이동 (Shield) |
-|--------------------|
-| ![Out of Bounds](image/out_of_bound.png) |
 
