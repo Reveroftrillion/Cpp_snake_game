@@ -118,4 +118,16 @@ g++ -std=c++17 src/main.cpp -lncurses -o snake
 ---
 
 ## 플레이 스크린샷
-- 
+
+| 시작 화면 | 게임 진행 |
+|-----------|-----------|
+| ![Start Screen](image/start_screen.png) | ![In-Game](image/in_game.png) |
+
+| 몸통 충돌 | 벽 충돌 |
+|-----------|-----------|
+| ![Body Collision](image/body.png) | ![Wall Collision](image/wall.png) |
+
+| 맵 밖 이동 (Shield) |
+|--------------------|
+| ![Out of Bounds](image/out_of_bound.png) |
+
