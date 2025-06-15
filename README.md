@@ -92,14 +92,17 @@ C++17과 **ncurses** 라이브러리로 구현한 콘솔 Snake Game입니다.
 | GrowthItem | ≥ 5 |
 | PoisonItem | ≥ 2 |
 | Gate 통과 | ≥ 1 |
-> ※ Shield / Random 아이템은 미션 집계 제외
+
+> ※ Shield 아이템은 미션 집계 제외  
+>  
+> ※ Random 아이템은 획득한 효과(Growth/Poison/Time/Shield)에 따라 자동 집계
 
 ---
 
 ## Game Over 조건
 1. **몸통 충돌** — 머리가 자기 Body와 접촉  
-2. **벽 충돌** — `Wall` 또는 `ImmunedWall` 접촉  
-3. **맵 밖 이동** — `Shield` 무적 상태라도 맵 좌표를 벗어나면 즉시 Game Over  
+2. **벽 충돌** — `Wall` 접촉  
+3. **맵 밖 이동** — `Shield`를 통한 무적 상태라도 맵 좌표를 벗어나면 즉시 Game Over  
 
 ---
 
