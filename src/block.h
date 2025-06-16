@@ -1,162 +1,221 @@
 #ifndef BLOCK_H
 #define BLOCK_H
-
 #include <iostream>
 #include <vector>
-using namespace std;
+#include <stdexcept>
 
-/*────────────────────────  공통 상수 · ENUM  ────────────────────────*/
-/*  objectType (게임 오브젝트 식별용)  */
-constexpr int OBJ_VOID         = 0;
-constexpr int OBJ_WALL         = 1;
-constexpr int OBJ_IMMUNE_WALL  = -1;   // 모서리 면역벽
-constexpr int OBJ_GATE         = 2;
-constexpr int OBJ_SNAKE_HEAD   = 3;
-constexpr int OBJ_SNAKE_BODY   = 4;
-constexpr int OBJ_GROWTH       = 5;
-constexpr int OBJ_POISON       = -5;
-constexpr int OBJ_TIME         = 6;
-constexpr int OBJ_SHIELD       = 7;    // 🟠 보호막 아이템  ← 신규
-constexpr int OBJ_RANDOM  = 8;          // ★ 랜덤 아이템
-/*  색상 팔레트 번호(ncurses) – 필요 시 자유롭게 변경  */
-constexpr int COL_SHIELD       = 9;
-constexpr int COL_RANDOM  = 10;      
-/*────────────────────────────────────────────────────────────────────*/
+using namespace std;
 
 struct Coord
 {
-    int row, col;                      // (x, y) → (row, col) 로 변경
-    bool operator==(const Coord &o) { return row == o.row && col == o.col; }
+    int row, col;
+
+    bool operator==(const Coord &other) const
+    {
+        return row == other.row && col == other.col;
+    }
+
+    bool operator!=(const Coord &other) const
+    {
+        return !(*this == other);
+    }
+
+    bool operator<(const Coord &other) const {
+        return (row < other.row) || (row == other.row && col < other.col);
+    }
+    
+    // 좌표 유효성 검사
+    bool isValid(int maxRow = 100, int maxCol = 100) const {
+        return row >= 0 && col >= 0 && row < maxRow && col < maxCol;
+    }
+    
+    // 안전한 좌표 설정
+    void setSafe(int newRow, int newCol, int maxRow = 100, int maxCol = 100) {
+        if (newRow < 0 || newRow >= maxRow || newCol < 0 || newCol >= maxCol) {
+            throw std::out_of_range("Coordinate out of bounds");
+        }
+        row = newRow;
+        col = newCol;
+    }
 };
 
-/*────────────────────────  Block 계층  ──────────────────────────────*/
 class Block
 {
 public:
     Coord coord;
-    int objectType = OBJ_VOID;
-
-    virtual int getObjectType() { return objectType; }
-
-    Block() : coord{0, 0} {}
-    Block(int r, int c) : coord{r, c} {}
-    Block(const Block &b) : coord{b.coord} {}
+    int objectType = 0;
+    
+    virtual ~Block() = default;
+    virtual int getObjectType() const { return objectType; }
+    
+    Block() = default;
+    Block(int row, int col) : coord{row, col} {
+        validateCoordinates(row, col);
+    }
+    Block(const Block &b) = default;
+    Block& operator=(const Block &b) = default;
+    
+protected:
+    // 좌표 유효성 검사 (기본적인 범위 체크)
+    void validateCoordinates(int row, int col) const {
+        if (row < 0 || col < 0) {
+            throw std::invalid_argument("Coordinates cannot be negative");
+        }
+        // 너무 큰 값도 체크 (메모리 오버플로우 방지)
+        if (row > 10000 || col > 10000) {
+            throw std::invalid_argument("Coordinates too large");
+        }
+    }
 };
 
-/*─── 벽류 ───────────────────────────────────────────────────────────*/
 class Wall : public Block
 {
 public:
-    int wallPositionType;              // Up=1, Right=2, Left=3, Down=4
-
-    Wall() : Block()                   { objectType = OBJ_WALL; }
-    Wall(int r, int c, int pos=-1)
-        : Block(r, c), wallPositionType(pos)
-    { objectType = OBJ_WALL; }
-
-    int getObjectType() override { return objectType; }
+    int wallPositionType;
+    
+    Wall() : Block() { objectType = 1; }
+    Wall(int row, int col, int wallPositionType = -1) 
+        : Block(row, col), wallPositionType(wallPositionType) 
+    {
+        objectType = 1;
+    }
+    
+    int getObjectType() const override { return objectType; }
 };
 
 class ImmunedWall : public Block
 {
 public:
-    ImmunedWall() : Block()            { objectType = OBJ_GATE; }   // 유지 (기존 코드와 동일)
-    ImmunedWall(int r, int c) : Block(r, c)
-    { objectType = OBJ_GATE; }
-
-    int getObjectType() override { return objectType; }
+    ImmunedWall() : Block() { objectType = 2; }
+    ImmunedWall(int row, int col) : Block(row, col) { objectType = 2; }
+    ImmunedWall(const ImmunedWall &iwall) = default;
+    ImmunedWall& operator=(const ImmunedWall &iwall) = default;
+    
+    int getObjectType() const override { return objectType; }
 };
 
-/*─── 아이템류 ───────────────────────────────────────────────────────*/
-class GrowthItem  : public Block { public:
-    GrowthItem() : Block(){ objectType = OBJ_GROWTH; }
-    GrowthItem(int r,int c):Block(r,c){ objectType = OBJ_GROWTH; }
-    int getObjectType() override { return objectType; }
-};
-
-class PoisonItem  : public Block { public:
-    PoisonItem() : Block(){ objectType = OBJ_POISON; }
-    PoisonItem(int r,int c):Block(r,c){ objectType = OBJ_POISON; }
-    int getObjectType() override { return objectType; }
-};
-
-class TimeItem    : public Block { public:
-    TimeItem() : Block(){ objectType = OBJ_TIME; }
-    TimeItem(int r,int c):Block(r,c){ objectType = OBJ_TIME; }
-    int getObjectType() override { return objectType; }
-};
-
-/* 🟠 보호막(Shield) 아이템 – 40 tick 무적 */
-class ShieldItem  : public Block {
+class GrowthItem : public Block
+{
 public:
-    ShieldItem() : Block()              { objectType = OBJ_SHIELD; }
-    ShieldItem(int r,int c):Block(r,c)  { objectType = OBJ_SHIELD; }
-    int getObjectType() override { return objectType; }
+    GrowthItem() : Block() { objectType = 5; }
+    GrowthItem(int row, int col) : Block(row, col) { objectType = 5; }
+    GrowthItem(const GrowthItem &gitem) = default;
+    GrowthItem& operator=(const GrowthItem &gitem) = default;
+    
+    int getObjectType() const override { return objectType; }
 };
-class RandomItem : public Block {
+
+class PoisonItem : public Block
+{
 public:
-    RandomItem()             : Block(-1,-1){ objectType = OBJ_RANDOM; }
-    RandomItem(int r,int c)  : Block(r, c){ objectType = OBJ_RANDOM; }
-    int getObjectType() override { return objectType; }
+    PoisonItem() : Block() { objectType = -5; }
+    PoisonItem(int row, int col) : Block(row, col) { objectType = -5; }
+    PoisonItem(const PoisonItem &pitem) = default;
+    PoisonItem& operator=(const PoisonItem &pitem) = default;
+    
+    int getObjectType() const override { return objectType; }
 };
-/*─── 게이트 ─────────────────────────────────────────────────────────*/
+
+class TimeItem : public Block
+{
+public:
+    TimeItem() : Block() { objectType = 6; }
+    TimeItem(int row, int col) : Block(row, col) { objectType = 6; }
+    TimeItem(const TimeItem &titem) = default;
+    TimeItem& operator=(const TimeItem &titem) = default;
+    
+    int getObjectType() const override { return objectType; }
+};
+
 class Gate : public Block
 {
 public:
-    int  exitDirection;                 // 1=Up,2=Left,3=Right,4=Down (wallPositionType 이용)
+    int exitDirection;
     bool isActive = false;
-
-    Gate() : Block() { objectType = OBJ_GATE; }
-
-    Gate(const Wall &w)
+    
+    Gate() : Block() { objectType = 2; }
+    Gate(const Wall &wall) : Block(wall.coord.row, wall.coord.col)
     {
-        coord         = w.coord;
-        exitDirection = 5 - w.wallPositionType;      // 반대쪽
-        objectType    = OBJ_GATE;
+        objectType = 2;
+        exitDirection = 5 - wall.wallPositionType;
     }
-    Gate(int r,int c):Block(r,c)        { objectType = OBJ_GATE; }
-
-    int getObjectType() override { return objectType; }
+    Gate(int row, int col) : Block(row, col) { objectType = 2; }
+    
+    int getObjectType() const override { return objectType; }
 };
 
-/*─── 스네이크 ───────────────────────────────────────────────────────*/
-class SnakeHead;                         // forward
+class SnakeHead;
 
 class SnakeBody : public Block
 {
 public:
-    SnakeBody() : Block()               { objectType = OBJ_SNAKE_BODY; }
-    SnakeBody(int r,int c):Block(r,c)   { objectType = OBJ_SNAKE_BODY; }
-    SnakeBody(const SnakeHead &head);    // 정의는 아래 inline
-
-    int getObjectType() override { return objectType; }
+    SnakeBody() : Block() { objectType = 4; }
+    SnakeBody(int row, int col) : Block(row, col) { objectType = 4; }
+    SnakeBody(const SnakeHead &head);
+    
+    int getObjectType() const override { return objectType; }
 };
 
 class SnakeHead : public Block
 {
 public:
     vector<SnakeBody> snakeBodySegments;
-    int currentDirection = -1;           // 1=Up,2=Left,3=Right,4=Down
-
-    SnakeHead() : Block()               { objectType = OBJ_SNAKE_HEAD; }
-    SnakeHead(int r,int c):Block(r,c)   { objectType = OBJ_SNAKE_HEAD; }
-
-    int getObjectType() override { return objectType; }
-
-    void move() {
-        switch (currentDirection) {
-            case 1: coord.row--; break;        // Up
-            case 2: coord.col--; break;        // Left
-            case 3: coord.col++; break;        // Right
-            case 4: coord.row++; break;        // Down
+    int currentDirection = -1;
+    
+    friend class SnakeBody;
+    
+    SnakeHead() : Block() { objectType = 3; }
+    SnakeHead(int row, int col) : Block(row, col) { objectType = 3; }
+    
+    int getObjectType() const override { return objectType; }
+    
+    void move()
+    {
+        // 이동 전 방향 유효성 검사
+        if (currentDirection < 1 || currentDirection > 4) {
+            return; // 유효하지 않은 방향이면 이동하지 않음
         }
+        
+        Coord newCoord = coord;
+        switch (currentDirection)
+        {
+            case 1: newCoord.row--; break; // Up
+            case 2: newCoord.col--; break; // Left
+            case 3: newCoord.col++; break; // Right
+            case 4: newCoord.row++; break; // Down
+        }
+        
+        // 새 좌표가 유효한 범위 내인지 확인 (기본적인 체크)
+        if (newCoord.isValid(1000, 1000)) {
+            coord = newCoord;
+        }
+        // 유효하지 않은 좌표로 이동하려 하면 그냥 무시 (게임 로직에서 처리)
+    }
+    
+    // 안전한 몸통 추가
+    void addBodySegment(int row, int col) {
+        try {
+            snakeBodySegments.emplace_back(row, col);
+        } catch (const std::exception& e) {
+            // 유효하지 않은 좌표면 머리 위치에 추가
+            snakeBodySegments.emplace_back(coord.row, coord.col);
+        }
+    }
+    
+    // 안전한 몸통 제거
+    bool removeBodySegment() {
+        if (snakeBodySegments.size() <= 3) {
+            return false; // 최소 길이 유지
+        }
+        snakeBodySegments.pop_back();
+        return true;
     }
 };
 
 inline SnakeBody::SnakeBody(const SnakeHead &head)
     : Block(head.coord.row, head.coord.col)
 {
-    objectType = OBJ_SNAKE_BODY;
+    objectType = 4;
 }
 
-#endif  // BLOCK_H
+#endif

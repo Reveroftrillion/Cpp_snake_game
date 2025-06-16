@@ -4,177 +4,367 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
-#include "block.h"          // 공통 오브젝트·상수 정의
+#include "block.h" // Assuming block.h is already modified
 
 using namespace std;
 
-/*──────────────────────────────
-   MAP CLASS  –  전체 필드와 로직
-──────────────────────────────*/
-struct MapDimensions {
+enum class MapType {
+    BASIC,      // 기본 맵
+    MAZE,       // 미로형 맵
+    ISLANDS,    // 섬형 맵
+    CROSS       // 십자형 맵
+};
+
+struct MapDimensions
+{
     int height, width;
+    
+    MapDimensions(int h = 21, int w = 21) : height(h), width(w) {}
 };
 
-class Map {
+class Map
+{
 public:
-    /* ── 필드 ── */
-    MapDimensions mapSize;                 // 맵 가로·세로
-    SnakeHead     snakeHeadObject;         // 스네이크 머리 + 몸통
-    vector<ImmunedWall> immuneWalls;       // 모서리 면역 벽
-    vector<Wall>        regularWalls;      // 일반 벽
-    vector<Gate>        gameGates = vector<Gate>(2);
+    MapDimensions mapSize;
+    SnakeHead snakeHeadObject;
+    vector<ImmunedWall> immuneWalls;
+    vector<Wall> regularWalls;
+    vector<Gate> gameGates;
+    GrowthItem growthItemObject;
+    PoisonItem poisonItemObject;
+    TimeItem timeItemObject;
+    MapType currentMapType;
 
-    GrowthItem  growthItemObject;
-    PoisonItem  poisonItemObject;
-    TimeItem    timeItemObject;
-    ShieldItem  shieldItemObject;          // 🟠 보호막 아이템
-    RandomItem randomItemObject; 
+    Map(int mapHeight = 21, int mapWidth = 21, int initialWallCount = 0, MapType type = MapType::BASIC, int stage = 1);
+    Map(const Map &m) = default;
+    Map& operator=(const Map &m) = default;
+    ~Map() = default;
 
-    /* ── 생성자 ── */
-    Map(int h = 21, int w = 21, int wallCnt = 0);
-    Map(const Map &m);                     // 깊은 복사
+    void print_map() const;
+    bool isPositionValid(const Coord& pos) const;
+    bool isPositionOccupied(const Coord& pos) const;
 
-    /* ── 메서드 ── */
-    void spawnShieldItem();    
-    void spawnRandomItem();           
-    void print_map();                      // (터미널 디버그용) 
+private:
+    void initializeWalls();
+    void generateRandomWalls(int count);
+    void generateMazeMap();
+    void generateIslandsMap();
+    void generateCrossMap(int rotation);
+    void generateMapByType(MapType type);
+    bool isNearSnake(const Coord& pos, const SnakeHead& snakeHead);
 };
 
-/*──────────────────────────────
-   IMPLEMENTATION
-──────────────────────────────*/
-inline Map::Map(int H, int W, int wallCnt)
+// void : 0, wall : 1, immune wall : -1, gate: 2, snake head: 3, snake body: 4
+
+Map::Map(int mapHeight, int mapWidth, int /*initialWallCount*/, MapType type, int stage)
+    : mapSize(mapHeight, mapWidth)
+    , gameGates(2)
+    , currentMapType(type)
 {
-    mapSize = { H, W };
-
-    /* 1) 테두리 벽 배치 ── 삼항 → if/else 로 변경 */
-    for (int r = 1; r <= H; ++r) {
-        for (int c = 1; c <= W; ++c) {
-
-            if (r == 1 || r == H) {                 // 위·아래 줄
-                if (c == 1 || c == W) {             // 네 모서리 = 면역 벽
-                    immuneWalls.emplace_back(r, c);
-                } else {                            // 상·하 경계 = 일반 벽
-                    int pos = (r == 1 ? 1 : 4);     // Up=1, Down=4
-                    regularWalls.emplace_back(r, c, pos);
-                }
-            }
-            else if (c == 1 || c == W) {            // 좌·우 경계
-                int pos = (c == 1 ? 2 : 3);         // Left=2, Right=3
-                regularWalls.emplace_back(r, c, pos);
-            }
-
+    initializeWalls();
+    snakeHeadObject = SnakeHead(mapHeight / 2, mapWidth / 2);
+    for(int i = 1; i <= 3; ++i) {
+        snakeHeadObject.snakeBodySegments.emplace_back(mapHeight / 2 + i, mapWidth / 2);
+    }
+    if (type == MapType::BASIC) {
+        // 내부 벽 없음 (테두리만)
+    } else if (type == MapType::MAZE) {
+        generateMazeMap();
+    } else if (type == MapType::ISLANDS) {
+        generateIslandsMap();
+    } else if (type == MapType::CROSS) {
+        int rotation = (stage - 1) % 4;
+        generateCrossMap(rotation);
+    }
+    std::vector<Coord> snakeCoords;
+    for (int dr = -1; dr <= 1; ++dr) {
+        for (int dc = -1; dc <= 1; ++dc) {
+            snakeCoords.push_back({snakeHeadObject.coord.row + dr, snakeHeadObject.coord.col + dc});
         }
     }
-
-    /* 2) 스네이크 초기화 (길이 4) */
-    snakeHeadObject = SnakeHead(H / 2, W / 2);
-    for (int k = 1; k <= 3; ++k)
-        snakeHeadObject.snakeBodySegments.emplace_back(H / 2 + k, W / 2);
-
-    growthItemObject  = GrowthItem (-1, -1);
-    poisonItemObject  = PoisonItem (-1, -1);
-    timeItemObject    = TimeItem   (-1, -1);
-    shieldItemObject  = ShieldItem (-1, -1);
-    randomItemObject  = RandomItem (-1, -1); 
-    /* 3) 내부 랜덤 벽 */
-    while (wallCnt--) {
-        int r = rand() % H + 1, c = rand() % W + 1;
-        int len = rand() % 6 + 4, dir = rand() % 4 + 1;   // 1U 2L 3R 4D
-        while (len--) {
-            if (r >= 1 && r < H && c >= 1 && c < W) {
-                Coord p{ r, c };
-                bool onSnake = (p == snakeHeadObject.coord);
-                for (auto &seg : snakeHeadObject.snakeBodySegments)
-                    onSnake |= (p == seg.coord);
-                if (!onSnake) regularWalls.emplace_back(r, c);
+    for (const auto& body : snakeHeadObject.snakeBodySegments) {
+        for (int dr = -1; dr <= 1; ++dr) {
+            for (int dc = -1; dc <= 1; ++dc) {
+                snakeCoords.push_back({body.coord.row + dr, body.coord.col + dc});
             }
-            switch (dir) { case 1: --r; break; case 2: --c; break;
-                           case 3: ++c; break; case 4: ++r; break; }
+        }
+    }
+    regularWalls.erase(std::remove_if(regularWalls.begin(), regularWalls.end(),
+        [&](const Wall& w) {
+            for(const auto& sc : snakeCoords) if (w.coord == sc) return true;
+            return false;
+        }), regularWalls.end());
+}
+
+void Map::initializeWalls()
+{
+    // Create border walls
+    for (int i = 1; i <= mapSize.height; ++i) {
+        for (int j = 1; j <= mapSize.width; ++j) {
+            if (i == 1 || i == mapSize.height) {
+                if (j == 1 || j == mapSize.width) {
+                    immuneWalls.emplace_back(i, j);
+                } else {
+                    regularWalls.emplace_back(i, j, (i == 1 ? 1 : 4));
+                }
+            } else if (j == 1 || j == mapSize.width) {
+                regularWalls.emplace_back(i, j, (j == 1 ? 2 : 3));
+            }
         }
     }
 }
 
-/* 복사 생성자 – STL 컨테이너가 알아서 깊은 복사 */
-inline Map::Map(const Map &m) = default;
-
-/*──────────────────────────────
-   🟠 보호막 아이템 스폰
-──────────────────────────────*/
-inline void Map::spawnShieldItem()
+void Map::generateMapByType(MapType type)
 {
-    /* 이미 맵 위에 존재하면 건너뜀 */
-    if (shieldItemObject.coord.row != -1) return;
-
-    while (true) {
-        int r = rand() % mapSize.height + 1;
-        int c = rand() % mapSize.width  + 1;
-        Coord p{ r, c };
-
-        /* ① 스네이크, ② 벽, ③ 다른 아이템과 겹치는지 검사 */
-        bool bad = (p == snakeHeadObject.coord);
-        for (auto &seg : snakeHeadObject.snakeBodySegments) bad |= (p == seg.coord);
-        for (auto &w : regularWalls)    bad |= (p == w.coord);
-        for (auto &w : immuneWalls)     bad |= (p == w.coord);
-        if (p == growthItemObject.coord ||
-            p == poisonItemObject.coord ||
-            p == timeItemObject.coord)
-            bad = true;
-
-        if (!bad) {                     // 빈 칸이면 배치 성공
-            shieldItemObject = ShieldItem(r, c);
+    switch(type) {
+        case MapType::BASIC:
             break;
-        }
+        case MapType::MAZE:
+            generateMazeMap();
+            break;
+        case MapType::ISLANDS:
+            generateIslandsMap();
+            break;
+        case MapType::CROSS:
+            generateCrossMap(0);
+            break;
     }
 }
 
-inline void Map::spawnRandomItem()
+void Map::generateMazeMap()
 {
-    if (randomItemObject.coord.row != -1) return;      // 이미 있음
-    while (true) {
-        int r = rand()%mapSize.height +1;
-        int c = rand()%mapSize.width  +1;
-        Coord p{r,c};
-        bool bad = (p==snakeHeadObject.coord);
-        for(auto &b:snakeHeadObject.snakeBodySegments) bad|=(p==b.coord);
-        for(auto &w:regularWalls) bad|=(p==w.coord);
-        for(auto &w:immuneWalls)  bad|=(p==w.coord);
-        for(auto &g : gameGates)         bad |= (p == g.coord);
-        if(p==growthItemObject.coord||p==poisonItemObject.coord||
-           p==timeItemObject.coord||p==shieldItemObject.coord) bad=true;
-        if(!bad){ randomItemObject=RandomItem(r,c); break; }
-    }
+    // ㄱ, ㄴ, └, ┐ 패턴의 벽을 가장자리에서 내부로 일부만 배치
+    int h = mapSize.height;
+    int w = mapSize.width;
+
+    // 좌상단 ㄱ자
+    for (int j = 2; j <= 6; ++j)
+        if (isPositionValid({2, j}) && !isNearSnake({2, j}, snakeHeadObject))
+            regularWalls.emplace_back(2, j);
+    for (int i = 2; i <= 5; ++i)
+        if (isPositionValid({i, 6}) && !isNearSnake({i, 6}, snakeHeadObject))
+            regularWalls.emplace_back(i, 6);
+
+    // 우상단 ㄴ자
+    for (int j = w-1; j >= w-5; --j)
+        if (isPositionValid({2, j}) && !isNearSnake({2, j}, snakeHeadObject))
+            regularWalls.emplace_back(2, j);
+    for (int i = 2; i <= 5; ++i)
+        if (isPositionValid({i, w-5}) && !isNearSnake({i, w-5}, snakeHeadObject))
+            regularWalls.emplace_back(i, w-5);
+
+    // 좌하단 └자
+    for (int i = h-1; i >= h-4; --i)
+        if (isPositionValid({i, 2}) && !isNearSnake({i, 2}, snakeHeadObject))
+            regularWalls.emplace_back(i, 2);
+    for (int j = 2; j <= 5; ++j)
+        if (isPositionValid({h-4, j}) && !isNearSnake({h-4, j}, snakeHeadObject))
+            regularWalls.emplace_back(h-4, j);
+
+    // 우하단 ┐자
+    for (int i = h-1; i >= h-4; --i)
+        if (isPositionValid({i, w-1}) && !isNearSnake({i, w-1}, snakeHeadObject))
+            regularWalls.emplace_back(i, w-1);
+    for (int j = w-1; j >= w-4; --j)
+        if (isPositionValid({h-4, j}) && !isNearSnake({h-4, j}, snakeHeadObject))
+            regularWalls.emplace_back(h-4, j);
+
+    // 중앙에 짧은 벽 추가(내부 공간 충분히 확보)
+    for (int j = w/2-2; j <= w/2+2; ++j)
+        if (isPositionValid({h/2, j}) && !isNearSnake({h/2, j}, snakeHeadObject))
+            regularWalls.emplace_back(h/2, j);
 }
 
-/*──────────────────────────────
-   (선택) 맵 출력 – 디버그용
-──────────────────────────────*/
-inline void Map::print_map()
+void Map::generateIslandsMap()
 {
-    for (int r = 1; r <= mapSize.height; ++r) {
-        for (int c = 1; c <= mapSize.width; ++c) {
-            char ch = ' ';
-            Coord p{ r, c };
-
-            if (p == snakeHeadObject.coord)            ch = 'H';
-            else {
-                bool printed = false;
-                for (auto &seg : snakeHeadObject.snakeBodySegments)
-                    if (p == seg.coord) { ch = 'o'; printed = true; break; }
-                if (!printed) {
-                    for (auto &w : immuneWalls)  if (p == w.coord) { ch = '#'; break; }
-                    for (auto &w : regularWalls) if (p == w.coord) { ch = '#'; break; }
-                    if (p == growthItemObject.coord)   ch = '+';
-                    if (p == poisonItemObject.coord)   ch = '-';
-                    if (p == timeItemObject.coord)     ch = 'T';
-                    if (p == shieldItemObject.coord)   ch = 'S';
-                    if (p == randomItemObject.coord)   ch = 'R'; 
+    // 중앙에 섬의 테두리만 벽으로 생성
+    int centerRow = mapSize.height / 2;
+    int centerCol = mapSize.width / 2;
+    int islandHalf = min(mapSize.height, mapSize.width) / 6; // 섬 크기 조절
+    int top = centerRow - islandHalf;
+    int bottom = centerRow + islandHalf;
+    int left = centerCol - islandHalf;
+    int right = centerCol + islandHalf;
+    for (int i = top; i <= bottom; ++i) {
+        for (int j = left; j <= right; ++j) {
+            if (i == top || i == bottom || j == left || j == right) {
+                Coord pos{i, j};
+                if (isPositionValid(pos) && !isNearSnake(pos, snakeHeadObject)) {
+                    regularWalls.emplace_back(i, j);
                 }
             }
-            std::cout << ch;
         }
-        std::cout << '\n';
     }
 }
 
-#endif  /* MAP_H */
+void Map::generateCrossMap(int rotation)
+{
+    int centerRow = mapSize.height / 2;
+    int centerCol = mapSize.width / 2;
+    int crossSize = min(mapSize.height, mapSize.width) / 3;
+    if (rotation % 2 == 0) {
+        // + 모양 (수직/수평)
+        for(int i = -crossSize; i <= crossSize; i++) {
+            Coord pos1{centerRow+i, centerCol};
+            Coord pos2{centerRow, centerCol+i};
+            if(isPositionValid(pos1) && !isNearSnake(pos1, snakeHeadObject)) regularWalls.emplace_back(pos1.row, pos1.col);
+            if(isPositionValid(pos2) && !isNearSnake(pos2, snakeHeadObject)) regularWalls.emplace_back(pos2.row, pos2.col);
+        }
+    } else {
+        // × 모양 (대각선)
+        for(int i = -crossSize; i <= crossSize; i++) {
+            Coord pos1{centerRow+i, centerCol+i};
+            Coord pos2{centerRow+i, centerCol-i};
+            if(isPositionValid(pos1) && !isNearSnake(pos1, snakeHeadObject)) regularWalls.emplace_back(pos1.row, pos1.col);
+            if(isPositionValid(pos2) && !isNearSnake(pos2, snakeHeadObject)) regularWalls.emplace_back(pos2.row, pos2.col);
+        }
+    }
+}
+
+bool Map::isNearSnake(const Coord& pos, const SnakeHead& snakeHead) {
+    // 머리와 몸통 + 8방향 1칸 이내
+    for (int dr = -1; dr <= 1; ++dr) {
+        for (int dc = -1; dc <= 1; ++dc) {
+            Coord check = {snakeHead.coord.row + dr, snakeHead.coord.col + dc};
+            if (pos == check) return true;
+        }
+    }
+    for (const auto& body : snakeHead.snakeBodySegments) {
+        for (int dr = -1; dr <= 1; ++dr) {
+            for (int dc = -1; dc <= 1; ++dc) {
+                Coord check = {body.coord.row + dr, body.coord.col + dc};
+                if (pos == check) return true;
+            }
+        }
+    }
+    return false;
+}
+
+void Map::generateRandomWalls(int count)
+{
+    while (count--) {
+        int row = rand() % (mapSize.height - 2) + 2;
+        int col = rand() % (mapSize.width - 2) + 2;
+        int length = rand() % 6 + 4;
+        int direction = rand() % 4 + 1;
+
+        for (int i = 0; i < length; ++i) {
+            Coord pos{row, col};
+            if (isPositionValid(pos) && !isPositionOccupied(pos) && !isNearSnake(pos, snakeHeadObject)) {
+                regularWalls.emplace_back(row, col);
+            }
+
+            switch (direction) {
+                case 1: row--; break; // Up
+                case 2: col--; break; // Left
+                case 3: col++; break; // Right
+                case 4: row++; break; // Down
+            }
+        }
+    }
+}
+
+bool Map::isPositionValid(const Coord& pos) const
+{
+    return pos.row >= 1 && pos.row < mapSize.height && 
+           pos.col >= 1 && pos.col < mapSize.width;
+}
+
+bool Map::isPositionOccupied(const Coord& pos) const
+{
+    if (snakeHeadObject.coord == pos) return true;
+    
+    for (const auto& body : snakeHeadObject.snakeBodySegments) {
+        if (body.coord == pos) return true;
+    }
+    
+    for (const auto& wall : regularWalls) {
+        if (wall.coord == pos) return true;
+    }
+    
+    return false;
+}
+
+void Map::print_map() const
+{
+    // 맵의 현재 상태를 출력
+    for (int i = 0; i < mapSize.height + 2; i++) {
+        for (int j = 0; j < mapSize.width + 2; j++) {
+            Coord pos{i, j};
+            bool printed = false;
+
+            // 테두리 출력
+            if (i == 0 || i == mapSize.height + 1 || j == 0 || j == mapSize.width + 1) {
+                cout << "#";
+                printed = true;
+                continue;
+            }
+
+            // 스네이크 헤드 출력
+            if (snakeHeadObject.coord == pos) {
+                cout << "H";
+                printed = true;
+                continue;
+            }
+
+            // 스네이크 바디 출력
+            for (const auto& body : snakeHeadObject.snakeBodySegments) {
+                if (body.coord == pos) {
+                    cout << "B";
+                    printed = true;
+                    break;
+                }
+            }
+            if (printed) continue;
+
+            // 게이트 출력
+            for (const auto& gate : gameGates) {
+                if (gate.coord == pos && gate.isActive) {
+                    cout << "G";
+                    printed = true;
+                    break;
+                }
+            }
+            if (printed) continue;
+
+            // 아이템 출력
+            if (growthItemObject.coord == pos) {
+                cout << "+";
+                printed = true;
+            } else if (poisonItemObject.coord == pos) {
+                cout << "-";
+                printed = true;
+            } else if (timeItemObject.coord == pos) {
+                cout << "T";
+                printed = true;
+            }
+            if (printed) continue;
+
+            // 벽 출력
+            for (const auto& wall : regularWalls) {
+                if (wall.coord == pos) {
+                    cout << "W";
+                    printed = true;
+                    break;
+                }
+            }
+            if (printed) continue;
+
+            // 무적 벽 출력
+            for (const auto& wall : immuneWalls) {
+                if (wall.coord == pos) {
+                    cout << "I";
+                    printed = true;
+                    break;
+                }
+            }
+            if (printed) continue;
+
+            // 빈 공간 출력
+            cout << " ";
+        }
+        cout << endl;
+    }
+}
+
+#endif
